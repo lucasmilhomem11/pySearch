@@ -115,7 +115,7 @@ def check_url(url, extensions, session, verbose, rate_limit=0, status_filter=Non
         headers = headers or {}
 
         # Check base URL with the specified HTTP method
-        res = session.request(method, url, data=payload, headers=headers, allow_redirects=True, timeout=8)
+        res = session.request(method, url, data=payload, headers=headers, allow_redirects=False, timeout=8)
         if verbose:
             console.print(f"[cyan]Checking URL: {url} - Status: {res.status_code}[/cyan]")
         content_length = res.headers.get("Content-Length", len(res.content))  # Fallback to actual content length
@@ -135,7 +135,7 @@ def check_url(url, extensions, session, verbose, rate_limit=0, status_filter=Non
             if rate_limit > 0:
                 time.sleep(1 / rate_limit)  # Enforce rate limit
             ext_url = normalize_url(f"{url}.{ext}")
-            res = session.request(method, ext_url, data=payload, headers=headers, allow_redirects=True, timeout=5)
+            res = session.request(method, ext_url, data=payload, headers=headers, allow_redirects=False, timeout=5)
             if verbose:
                 console.print(f"[cyan]Checking URL: {ext_url} - Status: {res.status_code}[/cyan]")
             content_length = res.headers.get("Content-Length", len(res.content))  # Fallback to actual content length
