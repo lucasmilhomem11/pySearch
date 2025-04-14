@@ -88,7 +88,8 @@ def read_wordlist(wordlist_path=None):
     if not wordlist_path:
         console.print("[yellow]No wordlist provided. Using default wordlist.[/yellow]")
         return default_wordlist
-
+    else:
+        console.print(f"[cyan]Using wordlist:[/cyan] [bold cyan]{wordlist_path}[/bold cyan]")
     try:
         with open(wordlist_path, "r", encoding="utf-8") as f:
             return [line.strip() for line in f if line.strip()]
@@ -233,7 +234,7 @@ def scan_subdomains(domain, wordlist, threads, recursive, verbose, progress=None
             sub_results = scan_subdomains(subdomain, wordlist, threads, False, verbose, progress, task_id)
             results.extend(sub_results)
     
-    # Ensure progress bar is completed even if no results are found
+    # Ensure progress is completed even if no results are found
     if progress and task_id and not results:
         progress.advance(task_id, advance=len(wordlist))
     
@@ -292,7 +293,7 @@ def save_results(results, output_file, mode="dir", export_format="csv"):
 
     console.print(f"[blue]Results saved to {output_file} in {export_format.upper()} format[/blue]")
 
-
+# Update the main function to pass new arguments
 def main():
     args = parse_args()
     wordlist = read_wordlist(args.wordlist)
@@ -300,7 +301,9 @@ def main():
 
     # Set User-Agent
     session.headers.update({"User-Agent": args.user_agent or "pySearch/1.0"})
-    console.print(f"[cyan]Using User-Agent: {session.headers['User-Agent']}[/cyan]")
+    console.print(f"[cyan]Using User-Agent: [/cyan] [bold cyan]{session.headers['User-Agent']}[/bold cyan]")
+
+  
 
     # Set Proxy
     if args.proxy:
@@ -343,7 +346,7 @@ def process_targets(urls, domains, wordlist, session, args, wildcard_content):
             display_and_save_results(results, target, args, mode="dns")
 
     with Progress(console=console) as progress:
-        # this Adds a task for each target
+        # Add a task for each target
         tasks = {target: progress.add_task(f"[cyan]Scanning {target}[/cyan]", total=len(wordlist)) for target in urls + domains}
 
         # Ensure progress updates even for a single target
@@ -355,7 +358,7 @@ def process_targets(urls, domains, wordlist, session, args, wildcard_content):
             task_id = tasks[target]
             process_target(target, mode, progress, task_id)
 
-        # Mark progress as complete for all tasks once process is finished
+        # Mark progress as complete for all tasks
         for task_id in tasks.values():
             progress.update(task_id, completed=len(wordlist))
 
