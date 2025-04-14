@@ -37,7 +37,7 @@ def gradient_text(ascii_art, start_color=(255, 0, 0), end_color=(0, 0, 255)):
         gradient.append(line + "\n", style=f"rgb({r},{g},{b})")
     return gradient
 
-# gradient from red to blue
+# Create a gradient from red to blue
 colored_ascii = gradient_text(ascii_art, start_color=(255, 0, 0), end_color=(0, 0, 255))
 
 # Print the gradient ASCII art
@@ -233,7 +233,7 @@ def scan_subdomains(domain, wordlist, threads, recursive, verbose, progress=None
             sub_results = scan_subdomains(subdomain, wordlist, threads, False, verbose, progress, task_id)
             results.extend(sub_results)
     
-    # Ensure progress is completed even if no results are found
+    # Ensure progress bar is completed even if no results are found
     if progress and task_id and not results:
         progress.advance(task_id, advance=len(wordlist))
     
@@ -292,7 +292,7 @@ def save_results(results, output_file, mode="dir", export_format="csv"):
 
     console.print(f"[blue]Results saved to {output_file} in {export_format.upper()} format[/blue]")
 
-# Update the main function to pass new arguments
+
 def main():
     args = parse_args()
     wordlist = read_wordlist(args.wordlist)
@@ -343,11 +343,21 @@ def process_targets(urls, domains, wordlist, session, args, wildcard_content):
             display_and_save_results(results, target, args, mode="dns")
 
     with Progress(console=console) as progress:
+        # this Adds a task for each target
         tasks = {target: progress.add_task(f"[cyan]Scanning {target}[/cyan]", total=len(wordlist)) for target in urls + domains}
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = [executor.submit(process_target, target, "url" if target in urls else "domain", progress, tasks[target]) for target in urls + domains]
-            for future in futures:
-                future.result()
+
+        # Ensure progress updates even for a single target
+        if len(tasks) == 1:
+            console.print("[cyan]Processing a single target. Progress bar will update accordingly.[/cyan]")
+
+        for target in urls + domains:
+            mode = "url" if target in urls else "domain"
+            task_id = tasks[target]
+            process_target(target, mode, progress, task_id)
+
+        # Mark progress as complete for all tasks once process is finished
+        for task_id in tasks.values():
+            progress.update(task_id, completed=len(wordlist))
 
 def check_content_match(response, match_string=None, match_regex=None):
     """Check if the response body contains a specific string or matches a regex."""
