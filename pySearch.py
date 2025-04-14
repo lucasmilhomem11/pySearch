@@ -37,7 +37,7 @@ def gradient_text(ascii_art, start_color=(255, 0, 0), end_color=(0, 0, 255)):
         gradient.append(line + "\n", style=f"rgb({r},{g},{b})")
     return gradient
 
-# Create a gradient from red to blue
+# gradient from red to blue
 colored_ascii = gradient_text(ascii_art, start_color=(255, 0, 0), end_color=(0, 0, 255))
 
 # Print the gradient ASCII art
@@ -66,7 +66,21 @@ def parse_args():
     parser.add_argument("--timeout", type=int, default=5, help="Request timeout in seconds (default: 5)")
     parser.add_argument("--disable-wildcard", action="store_true", help="Disable wildcard detection")
     parser.add_argument("--user-agent", type=str, help="Custom User-Agent string (e.g., 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')")
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    # Validate URL argument
+    if args.url:
+        urls = args.url.split(",")
+        for url in urls:
+            parsed = urlparse(url)
+            if not parsed.scheme or not parsed.netloc:
+                console.print(f"[red]Error: Invalid URL format: {url}[/red]")
+                sys.exit(1)
+    elif not args.url and not args.domain:
+        console.print("[red]Error: You must provide at least one URL or domain to scan.[/red]")
+        sys.exit(1)
+
+    return args
 
 def read_wordlist(wordlist_path=None):
     """Read wordlist file efficiently or use a default wordlist."""
