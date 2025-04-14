@@ -1,6 +1,6 @@
 # 🔍 pySearch
 
-**Enhanced Gobuster-like Tool with Recursive Scanning**
+**Web direcotiry search with Recursive Scanning and simplified output**
 
 `pySearch` is a powerful Python-based directory and subdomain enumeration tool. It enables penetration testers and bug bounty hunters to efficiently brute-force URLs and domains with support for recursive scanning, custom wordlists, multi-threading, proxies, and more.
 
