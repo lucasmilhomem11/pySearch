@@ -15,6 +15,7 @@ import pyfiglet
 from rich.text import Text
 import json
 from rich.markdown import Markdown
+import time
 
 # Initialize rich console for colored, organized output
 console = Console()
@@ -50,7 +51,7 @@ def parse_args():
     parser.add_argument("-u", "--url", type=str, help="Comma-separated list of target URLs (e.g., http://example.com,http://test.com)")
     parser.add_argument("-d", "--domain", type=str, help="Comma-separated list of target domains (e.g., example.com,test.com)")
     parser.add_argument("-w", "--wordlist", type=str, required=False, help="Path to wordlist file")
-    parser.add_argument("-t", "--threads", type=int, default=10, help="Number of concurrent threads")
+    parser.add_argument("-t", "--threads", type=int, default=40, help="Number of concurrent threads")
     parser.add_argument("-x", "--extensions", type=str, default="", help="File extensions to check (e.g., php,txt,html)")
     parser.add_argument("-r", "--recursive", action="store_true", help="Enable recursive scanning of directories and subdomains")
     parser.add_argument("--depth", type=int, default=1, help="Maximum depth for recursive scanning (default: 1)")
@@ -87,12 +88,15 @@ def read_wordlist(wordlist_path=None):
     default_wordlist = ["admin", "login", "dashboard", "config", "index", "home", "about", "contact", "api", "assets", "docs", "temp"]
     if not wordlist_path:
         console.print("[yellow]No wordlist provided. Using default wordlist.[/yellow]")
+        console.print(f"[cyan]Wordlist contains {len(default_wordlist)} words.[/cyan]")
         return default_wordlist
     else:
         console.print(f"[cyan]Using wordlist:[/cyan] [bold cyan]{wordlist_path}[/bold cyan]")
     try:
         with open(wordlist_path, "r", encoding="utf-8") as f:
-            return [line.strip() for line in f if line.strip()]
+            wordlist = [line.strip() for line in f if line.strip()]
+            console.print(f"[cyan]Wordlist contains {len(wordlist)} words.[/cyan]")  # Print wordlist count
+            return wordlist
     except FileNotFoundError:
         console.print("[red]Error: Wordlist file not found.[/red]")
         sys.exit(1)
@@ -180,31 +184,28 @@ def check_subdomain(subdomain, domain, verbose):
         return None
 
 def scan_directories(url, wordlist, extensions, threads, recursive, session, verbose, rate_limit=0, depth=0, max_depth=1, status_filter=None, progress=None, task_id=None, method="GET", payload=None, headers=None, wildcard_content=None):
-    """Scan directories and files with recursive option."""
-    # Stop recursion if the maximum depth is exceeded
     if depth > max_depth:
         return []
 
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
-        future_to_url = {
+        future_to_word = {
             executor.submit(check_url, urljoin(url, word), extensions, session, verbose, rate_limit, status_filter, method, payload, headers, wildcard_content): word
             for word in wordlist
         }
-        for future in concurrent.futures.as_completed(future_to_url):
+        for future in concurrent.futures.as_completed(future_to_word):
+            word = future_to_word[future]
             result = future.result()
-            results.extend(result)
+            for url, status, length in result:
+                results.append((url, status, length, word))  
             if progress and task_id:
-                progress.advance(task_id)  # Ensure progress is updated for each completed task
+                progress.advance(task_id)
 
-    # Normalize and deduplicate results
-    results = list({normalize_url(url): (url, status, length) for url, status, length in results}.values())
+    results = list({normalize_url(url): (url, status, length, word) for url, status, length, word in results}.values())
 
-    # Recursive scanning for discovered directories
     if recursive:
-        for found_url, status, _ in results:
-            if found_url.endswith("/") and status in {200, 301, 302}:  # Only recurse on valid directories
-                console.print(f"[green]Recursing into {found_url} (Depth {depth + 1})[/green]")
+        for found_url, status, _, word in results:
+            if found_url.endswith("/") and status in {200, 301, 302}:
                 sub_results = scan_directories(
                     found_url, wordlist, extensions, threads, recursive, session, verbose, rate_limit, depth + 1, max_depth, status_filter, progress, task_id, method, payload, headers, wildcard_content
                 )
@@ -241,14 +242,14 @@ def scan_subdomains(domain, wordlist, threads, recursive, verbose, progress=None
     return results
 
 def display_and_save_results(results, target, args, mode="dir"):
-    """Display and save results."""
     table = Table(title=f"{mode.upper()} Enumeration Results", show_header=True, header_style="bold magenta")
     if mode == "dir":
         table.add_column("URL", style="cyan")
         table.add_column("Status", style="green")
         table.add_column("Content Length", style="yellow")
-        for url, status, length in results:
-            table.add_row(url, str(status), str(length))
+        table.add_column("Directory", style="magenta")  # 3rd column
+        for url, status, length, word in results:
+            table.add_row(url, str(status), str(length), word)
     else:
         table.add_column("Subdomain", style="cyan")
         table.add_column("IP Addresses", style="green")
@@ -260,16 +261,15 @@ def display_and_save_results(results, target, args, mode="dir"):
         save_results(results, f"{args.output}_{target.replace('://', '_').replace('/', '_')}", mode, args.export_format)
 
 def save_results(results, output_file, mode="dir", export_format="csv"):
-    """Save results to a file in the specified format."""
     if not output_file:
         return
 
     if export_format == "csv":
         with open(output_file, "w", encoding="utf-8") as f:
             if mode == "dir":
-                f.write("URL,Status,Content-Length\n")
-                for url, status, length in results:
-                    f.write(f"{url},{status},{length}\n")
+                f.write("URL,Status,Content-Length,Directory\n")  #added new Directory column
+                for url, status, length, word in results:
+                    f.write(f"{url},{status},{length},{word}\n")
             else:
                 f.write("Subdomain,IP Addresses\n")
                 for subdomain, ips in results:
@@ -280,9 +280,9 @@ def save_results(results, output_file, mode="dir", export_format="csv"):
     elif export_format == "html":
         with open(output_file, "w", encoding="utf-8") as f:
             if mode == "dir":
-                html_content = "<table><tr><th>URL</th><th>Status</th><th>Content Length</th></tr>"
-                for url, status, length in results:
-                    html_content += f"<tr><td>{url}</td><td>{status}</td><td>{length}</td></tr>"
+                html_content = "<table><tr><th>URL</th><th>Status</th><th>Content Length</th><th>Directory</th></tr>"
+                for url, status, length, word in results:
+                    html_content += f"<tr><td>{url}</td><td>{status}</td><td>{length}</td><td>{word}</td></tr>"
                 html_content += "</table>"
             else:
                 html_content = "<table><tr><th>Subdomain</th><th>IP Addresses</th></tr>"
@@ -295,6 +295,9 @@ def save_results(results, output_file, mode="dir", export_format="csv"):
 
 # Update the main function to pass new arguments
 def main():
+
+    start_time = time.time()
+
     args = parse_args()
     wordlist = read_wordlist(args.wordlist)
     session = requests.Session()
@@ -328,6 +331,10 @@ def main():
 
     # Process targets
     process_targets(urls, domains, wordlist, session, args, wildcard_content)
+
+    end_time = time.time()  # End the timer
+    elapsed_time = end_time - start_time  # Calculate elapsed time
+    console.print(f"[green]Execution completed in {elapsed_time:.2f} seconds.[/green]")
 
 def process_targets(urls, domains, wordlist, session, args, wildcard_content):
     """Process URLs and domains."""
