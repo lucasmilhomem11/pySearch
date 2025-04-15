@@ -17,15 +17,11 @@ import json
 from rich.markdown import Markdown
 import time
 
-# Initialize rich console for colored, organized output
 console = Console()
 
-# Generate ASCII art
 ascii_art = pyfiglet.figlet_format("pySearch")
 
-# Apply a smooth RGB gradient to the ASCII art
 def gradient_text(ascii_art, start_color=(255, 0, 0), end_color=(0, 0, 255)):
-    """Apply a smooth gradient to ASCII art."""
     def calculate_color(start, end, ratio):
         return int(start + (end - start) * ratio)
 
@@ -38,14 +34,12 @@ def gradient_text(ascii_art, start_color=(255, 0, 0), end_color=(0, 0, 255)):
         gradient.append(line + "\n", style=f"rgb({r},{g},{b})")
     return gradient
 
-# Create a gradient from red to blue
 colored_ascii = gradient_text(ascii_art, start_color=(255, 0, 0), end_color=(0, 0, 255))
 
-# Print the gradient ASCII art
 console.print(colored_ascii)
 
 
-# Add support for custom headers and payloads in the argument parser
+# support for custom headers and payloads in the argument parser
 def parse_args():
     parser = argparse.ArgumentParser(description="Web Directory Search Tool with Recursive Scanning")
     parser.add_argument("-u", "--url", type=str, help="Comma-separated list of target URLs (e.g., http://example.com,http://test.com)")
@@ -69,7 +63,6 @@ def parse_args():
     parser.add_argument("--user-agent", type=str, help="Custom User-Agent string (e.g., 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')")
     args = parser.parse_args()
 
-    # Validate URL argument
     if args.url:
         urls = args.url.split(",")
         for url in urls:
@@ -84,7 +77,6 @@ def parse_args():
     return args
 
 def read_wordlist(wordlist_path=None):
-    """Read wordlist file efficiently or use a default wordlist."""
     default_wordlist = ["admin", "login", "dashboard", "config", "index", "home", "about", "contact", "api", "assets", "docs", "temp"]
     if not wordlist_path:
         console.print("[yellow]No wordlist provided. Using default wordlist.[/yellow]")
@@ -102,40 +94,33 @@ def read_wordlist(wordlist_path=None):
         sys.exit(1)
 
 def normalize_url(url):
-    """Normalize a URL by removing trailing periods."""
     return url.rstrip(".")
 
-# Add support for HTTP methods
 def check_url(url, extensions, session, verbose, rate_limit=0, status_filter=None, method="GET", payload=None, headers=None, wildcard_content=None):
-    """Check if a URL exists and return result."""
-    results = set()  # Use a set to store unique results
+    results = set()  
     try:
-        # Parse status filter
-        allowed_statuses = set(map(int, status_filter.split(","))) if status_filter else None
+        if status_filter:
+            allowed_statuses = {int(code) for code in status_filter.split(",")}
+        else:
+            allowed_statuses = None
 
-        # Normalize the base URL
         url = normalize_url(url)
 
-        # Prepare headers
         headers = headers or {}
 
-        # Check base URL with the specified HTTP method
         res = session.request(method, url, data=payload, headers=headers, allow_redirects=False, timeout=8)
         if verbose:
             console.print(f"[cyan]Checking URL: {url} - Status: {res.status_code}[/cyan]")
-        content_length = res.headers.get("Content-Length", len(res.content))  # Fallback to actual content length
+        content_length = res.headers.get("Content-Length", len(res.content)) 
 
-        # Compare with wildcard response content
         if wildcard_content and res.content == wildcard_content:
             if verbose:
                 console.print(f"[yellow]Skipping wildcard response for {url}[/yellow]")
             return list(results)
 
-        # Include 404 only if explicitly allowed in status_filter
         if (allowed_statuses and res.status_code in allowed_statuses) or (res.status_code != 404 and not allowed_statuses):
             results.add((url, res.status_code, content_length))
         
-        # Check extensions if provided
         for ext in extensions:
             if rate_limit > 0:
                 time.sleep(1 / rate_limit)  # Enforce rate limit
@@ -143,24 +128,21 @@ def check_url(url, extensions, session, verbose, rate_limit=0, status_filter=Non
             res = session.request(method, ext_url, data=payload, headers=headers, allow_redirects=False, timeout=5)
             if verbose:
                 console.print(f"[cyan]Checking URL: {ext_url} - Status: {res.status_code}[/cyan]")
-            content_length = res.headers.get("Content-Length", len(res.content))  # Fallback to actual content length
+            content_length = res.headers.get("Content-Length", len(res.content))  
 
-            # Compare with wildcard response content
             if wildcard_content and res.content == wildcard_content:
                 if verbose:
                     console.print(f"[yellow]Skipping wildcard response for {ext_url}[/yellow]")
                 continue
 
-            # Include 404 only if explicitly allowed in status_filter
             if (allowed_statuses and res.status_code in allowed_statuses) or (res.status_code != 404 and not allowed_statuses):
                 results.add((ext_url, res.status_code, content_length))
     except requests.RequestException as e:
         if verbose:
             console.print(f"[yellow]Warning: Failed to check {url}: {e}[/yellow]")
-    return list(results)  # Convert the set back to a list
+    return list(results)  
 
-def is_wildcard_response(base_url, session, method="GET", headers=None):
-    """Detect if the server returns wildcard responses."""
+def wildcard_response(base_url, session, method="GET", headers=None):
     test_url = urljoin(base_url, "nonexistent")
     try:
         res = session.request(method, test_url, headers=headers, timeout=5)
@@ -169,7 +151,6 @@ def is_wildcard_response(base_url, session, method="GET", headers=None):
         return None
 
 def check_subdomain(subdomain, domain, verbose):
-    """Check if a subdomain exists."""
     full_domain = f"{subdomain}.{domain}"
     try:
         answers = dns.resolver.resolve(full_domain, "A")
@@ -214,7 +195,6 @@ def scan_directories(url, wordlist, extensions, threads, recursive, session, ver
     return results
 
 def scan_subdomains(domain, wordlist, threads, recursive, verbose, progress=None, task_id=None):
-    """Scan subdomains with recursive option."""
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
         future_to_subdomain = {
@@ -226,16 +206,14 @@ def scan_subdomains(domain, wordlist, threads, recursive, verbose, progress=None
             if result:
                 results.append(result)
             if progress and task_id:
-                progress.advance(task_id)  # Ensure progress is updated for each completed task
+                progress.advance(task_id)  
     
-    # Recursive subdomain scanning (optional, limited to avoid excessive requests)
     if recursive:
         for subdomain, _ in results:
             console.print(f"[green]Recursing into subdomain {subdomain}[/green]")
             sub_results = scan_subdomains(subdomain, wordlist, threads, False, verbose, progress, task_id)
             results.extend(sub_results)
     
-    # Ensure progress is completed even if no results are found
     if progress and task_id and not results:
         progress.advance(task_id, advance=len(wordlist))
     
@@ -293,7 +271,6 @@ def save_results(results, output_file, mode="dir", export_format="csv"):
 
     console.print(f"[blue]Results saved to {output_file} in {export_format.upper()} format[/blue]")
 
-# Update the main function to pass new arguments
 def main():
 
     start_time = time.time()
@@ -302,42 +279,35 @@ def main():
     wordlist = read_wordlist(args.wordlist)
     session = requests.Session()
 
-    # Set User-Agent
     session.headers.update({"User-Agent": args.user_agent or "pySearch/1.0"})
     console.print(f"[cyan]Using User-Agent: [/cyan] [bold cyan]{session.headers['User-Agent']}[/bold cyan]")
 
   
 
-    # Set Proxy
     if args.proxy:
         session.proxies.update({"http": args.proxy, "https": args.proxy})
         console.print(f"[cyan]Using proxy: {args.proxy}[/cyan]")
 
-    # Split URLs and domains
     urls = args.url.split(",") if args.url else []
     domains = args.domain.split(",") if args.domain else []
 
-    # Limit targets
     if len(urls) > 3 or len(domains) > 3:
         console.print("[red]Error: You can only scan up to 3 targets at the same time.[/red]")
         sys.exit(1)
 
-    # Detect wildcard response
     wildcard_content = None
     if urls and not args.disable_wildcard:
-        wildcard_content = is_wildcard_response(urls[0], session, method=args.method, headers=None)
+        wildcard_content = wildcard_response(urls[0], session, method=args.method, headers=None)
         if wildcard_content:
             console.print("[yellow]Wildcard response detected. Filtering results...[/yellow]")
 
-    # Process targets
     process_targets(urls, domains, wordlist, session, args, wildcard_content)
 
-    end_time = time.time()  # End the timer
-    elapsed_time = end_time - start_time  # Calculate elapsed time
+    end_time = time.time()  
+    elapsed_time = end_time - start_time  
     console.print(f"[green]Execution completed in {elapsed_time:.2f} seconds.[/green]")
 
 def process_targets(urls, domains, wordlist, session, args, wildcard_content):
-    """Process URLs and domains."""
     def process_target(target, mode, progress, task_id):
         if mode == "url":
             results = scan_directories(
@@ -356,7 +326,6 @@ def process_targets(urls, domains, wordlist, session, args, wildcard_content):
         # Add a task for each target
         tasks = {target: progress.add_task(f"[cyan]Scanning {target}[/cyan]", total=len(wordlist)) for target in urls + domains}
 
-        # Ensure progress updates even for a single target
         if len(tasks) == 1:
             console.print("[cyan]Processing a single target. Progress bar will update accordingly.[/cyan]")
 
@@ -365,12 +334,10 @@ def process_targets(urls, domains, wordlist, session, args, wildcard_content):
             task_id = tasks[target]
             process_target(target, mode, progress, task_id)
 
-        # Mark progress as complete for all tasks
         for task_id in tasks.values():
             progress.update(task_id, completed=len(wordlist))
 
 def check_content_match(response, match_string=None, match_regex=None):
-    """Check if the response body contains a specific string or matches a regex."""
     if match_string and match_string in response.text:
         return True
     if match_regex:
@@ -380,7 +347,6 @@ def check_content_match(response, match_string=None, match_regex=None):
     return False
 
 def combine_wordlists(wordlists):
-    """Combine multiple wordlists into one."""
     combined = set()
     for wordlist in wordlists:
         with open(wordlist, "r", encoding="utf-8") as f:
@@ -388,7 +354,6 @@ def combine_wordlists(wordlists):
     return list(combined)
 
 def add_authentication(session, auth_type, credentials):
-    """Add authentication to the session."""
     if auth_type == "basic":
         from requests.auth import HTTPBasicAuth
         session.auth = HTTPBasicAuth(*credentials.split(":"))
