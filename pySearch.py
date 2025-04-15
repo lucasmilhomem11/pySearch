@@ -10,27 +10,22 @@ from rich.table import Table
 from rich.progress import Progress
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
 import pyfiglet
 from rich.text import Text
 import json
 from rich.markdown import Markdown
-import time
 
 console = Console()
 
 ascii_art = pyfiglet.figlet_format("pySearch")
 
 def gradient_text(ascii_art, start_color=(255, 0, 0), end_color=(0, 0, 255)):
-    def calculate_color(start, end, ratio):
-        return int(start + (end - start) * ratio)
-
     gradient = Text()
     lines = ascii_art.splitlines()
     total_lines = len(lines)
     for i, line in enumerate(lines):
         ratio = i / total_lines
-        r, g, b = (calculate_color(start_color[j], end_color[j], ratio) for j in range(3))
+        r, g, b = [int(start + (end - start) * ratio) for start, end in zip(start_color, end_color)]
         gradient.append(line + "\n", style=f"rgb({r},{g},{b})")
     return gradient
 
@@ -80,21 +75,19 @@ def read_wordlist(wordlist_path=None):
     default_wordlist = ["admin", "login", "dashboard", "config", "index", "home", "about", "contact", "api", "assets", "docs", "temp"]
     if not wordlist_path:
         console.print("[yellow]No wordlist provided. Using default wordlist.[/yellow]")
-        console.print(f"[cyan]Wordlist contains {len(default_wordlist)} words.[/cyan]")
         return default_wordlist
-    else:
-        console.print(f"[cyan]Using wordlist:[/cyan] [bold cyan]{wordlist_path}[/bold cyan]")
+
+    console.print(f"[cyan]Using wordlist:[/cyan] [bold cyan]{wordlist_path}[/bold cyan]")
     try:
         with open(wordlist_path, "r", encoding="utf-8") as f:
             wordlist = [line.strip() for line in f if line.strip()]
-            console.print(f"[cyan]Wordlist contains {len(wordlist)} words.[/cyan]")  # Print wordlist count
+            console.print(f"[cyan]Wordlist contains {len(wordlist)} words.[/cyan]")
             return wordlist
     except FileNotFoundError:
         console.print("[red]Error: Wordlist file not found.[/red]")
         sys.exit(1)
 
-def normalize_url(url):
-    return url.rstrip(".")
+normalize_url = lambda url: url.rstrip(".")
 
 def check_url(url, extensions, session, verbose, rate_limit=0, status_filter=None, method="GET", payload=None, headers=None, wildcard_content=None):
     results = set()  
@@ -142,10 +135,10 @@ def check_url(url, extensions, session, verbose, rate_limit=0, status_filter=Non
             console.print(f"[yellow]Warning: Failed to check {url}: {e}[/yellow]")
     return list(results)  
 
-def wildcard_response(base_url, session, method="GET", headers=None):
+def wildcard_response(base_url, session, method="GET"):
     test_url = urljoin(base_url, "nonexistent")
     try:
-        res = session.request(method, test_url, headers=headers, timeout=5)
+        res = session.request(method, test_url, timeout=5)
         return res.content if res.status_code == 200 else None
     except requests.RequestException:
         return None
@@ -272,7 +265,6 @@ def save_results(results, output_file, mode="dir", export_format="csv"):
     console.print(f"[blue]Results saved to {output_file} in {export_format.upper()} format[/blue]")
 
 def main():
-
     start_time = time.time()
 
     args = parse_args()
@@ -293,16 +285,9 @@ def main():
         console.print("[red]Error: You can only scan up to 3 targets at the same time.[/red]")
         sys.exit(1)
 
-    wildcard_content = None
-    if urls and not args.disable_wildcard:
-        wildcard_content = wildcard_response(urls[0], session, method=args.method, headers=None)
-        if wildcard_content:
-            console.print("[yellow]Wildcard response detected. Filtering results...[/yellow]")
+    process_targets(urls, domains, wordlist, session, args, None)
 
-    process_targets(urls, domains, wordlist, session, args, wildcard_content)
-
-    end_time = time.time()  
-    elapsed_time = end_time - start_time  
+    elapsed_time = time.time() - start_time
     console.print(f"[green]Execution completed in {elapsed_time:.2f} seconds.[/green]")
 
 def handle_target(target, mode, progress, task_id, wordlist, session, args, wildcard_content):
@@ -321,11 +306,7 @@ def handle_target(target, mode, progress, task_id, wordlist, session, args, wild
 
 def process_targets(urls, domains, wordlist, session, args, wildcard_content):
     with Progress(console=console) as progress:
-        # Add a task for each target
         tasks = {target: progress.add_task(f"[cyan]Scanning {target}[/cyan]", total=len(wordlist)) for target in urls + domains}
-
-        if len(tasks) == 1:
-            console.print("[cyan]Processing a single target. Progress bar will update accordingly.[/cyan]")
 
         for target in urls + domains:
             mode = "url" if target in urls else "domain"
