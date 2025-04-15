@@ -282,8 +282,6 @@ def main():
     session.headers.update({"User-Agent": args.user_agent or "pySearch/1.0"})
     console.print(f"[cyan]Using User-Agent: [/cyan] [bold cyan]{session.headers['User-Agent']}[/bold cyan]")
 
-  
-
     if args.proxy:
         session.proxies.update({"http": args.proxy, "https": args.proxy})
         console.print(f"[cyan]Using proxy: {args.proxy}[/cyan]")
@@ -307,21 +305,21 @@ def main():
     elapsed_time = end_time - start_time  
     console.print(f"[green]Execution completed in {elapsed_time:.2f} seconds.[/green]")
 
-def process_targets(urls, domains, wordlist, session, args, wildcard_content):
-    def process_target(target, mode, progress, task_id):
-        if mode == "url":
-            results = scan_directories(
-                target, wordlist, args.extensions.split(","), args.threads, args.recursive, session, args.verbose,
-                rate_limit=args.rate_limit, status_filter=args.status_filter, progress=progress, task_id=task_id,
-                max_depth=args.depth, method=args.method, payload=args.payload, headers=args.headers, wildcard_content=wildcard_content
-            )
-            display_and_save_results(results, target, args, mode="dir")
-        elif mode == "domain":
-            results = scan_subdomains(
-                target, wordlist, args.threads, args.recursive, args.verbose, progress=progress, task_id=task_id
-            )
-            display_and_save_results(results, target, args, mode="dns")
+def handle_target(target, mode, progress, task_id, wordlist, session, args, wildcard_content):
+    if mode == "url":
+        results = scan_directories(
+            target, wordlist, args.extensions.split(","), args.threads, args.recursive, session, args.verbose,
+            rate_limit=args.rate_limit, status_filter=args.status_filter, progress=progress, task_id=task_id,
+            max_depth=args.depth, method=args.method, payload=args.payload, headers=args.headers, wildcard_content=wildcard_content
+        )
+        display_and_save_results(results, target, args, mode="dir")
+    elif mode == "domain":
+        results = scan_subdomains(
+            target, wordlist, args.threads, args.recursive, args.verbose, progress=progress, task_id=task_id
+        )
+        display_and_save_results(results, target, args, mode="dns")
 
+def process_targets(urls, domains, wordlist, session, args, wildcard_content):
     with Progress(console=console) as progress:
         # Add a task for each target
         tasks = {target: progress.add_task(f"[cyan]Scanning {target}[/cyan]", total=len(wordlist)) for target in urls + domains}
@@ -332,33 +330,10 @@ def process_targets(urls, domains, wordlist, session, args, wildcard_content):
         for target in urls + domains:
             mode = "url" if target in urls else "domain"
             task_id = tasks[target]
-            process_target(target, mode, progress, task_id)
+            handle_target(target, mode, progress, task_id, wordlist, session, args, wildcard_content)
 
         for task_id in tasks.values():
             progress.update(task_id, completed=len(wordlist))
-
-def check_content_match(response, match_string=None, match_regex=None):
-    if match_string and match_string in response.text:
-        return True
-    if match_regex:
-        import re
-        if re.search(match_regex, response.text):
-            return True
-    return False
-
-def combine_wordlists(wordlists):
-    combined = set()
-    for wordlist in wordlists:
-        with open(wordlist, "r", encoding="utf-8") as f:
-            combined.update(line.strip() for line in f if line.strip())
-    return list(combined)
-
-def add_authentication(session, auth_type, credentials):
-    if auth_type == "basic":
-        from requests.auth import HTTPBasicAuth
-        session.auth = HTTPBasicAuth(*credentials.split(":"))
-    elif auth_type == "bearer":
-        session.headers.update({"Authorization": f"Bearer {credentials}"})
 
 if __name__ == "__main__":
     main()
