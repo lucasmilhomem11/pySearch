@@ -236,34 +236,19 @@ def save_results(results, output_file, mode="dir", export_format="csv"):
         return
 
     if export_format == "csv":
-        with open(output_file, "w", encoding="utf-8") as f:
-            if mode == "dir":
-                f.write("URL,Status,Content-Length,Directory\n")  #added new Directory column
-                for url, status, length, word in results:
-                    f.write(f"{url},{status},{length},{word}\n")
-            else:
-                f.write("Subdomain,IP Addresses\n")
-                for subdomain, ips in results:
-                    f.write(f"{subdomain},{','.join(ips)}\n")
+        headers = ["URL", "Status", "Content-Length", "Directory"] if mode == "dir" else ["Subdomain", "IP Addresses"]
+        rows = [",".join(map(str, row)) for row in results]
     elif export_format == "json":
-        with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(results, f, indent=4)
+        headers, rows = None, json.dumps(results, indent=4)
     elif export_format == "html":
-        with open(output_file, "w", encoding="utf-8") as f:
-            if mode == "dir":
-                html_content = "<table><tr><th>URL</th><th>Status</th><th>Content Length</th><th>Directory</th></tr>"
-                for url, status, length, word in results:
-                    html_content += f"<tr><td>{url}</td><td>{status}</td><td>{length}</td><td>{word}</td></tr>"
-                html_content += "</table>"
-            else:
-                html_content = "<table><tr><th>Subdomain</th><th>IP Addresses</th></tr>"
-                for subdomain, ips in results:
-                    html_content += f"<tr><td>{subdomain}</td><td>{', '.join(ips)}</td></tr>"
-                html_content += "</table>"
-            f.write(html_content)
+        headers = ["URL", "Status", "Content Length", "Directory"] if mode == "dir" else ["Subdomain", "IP Addresses"]
+        rows = "".join(f"<tr>{''.join(f'<td>{col}</td>' for col in row)}</tr>" for row in results)
+        rows = f"<table><tr>{''.join(f'<th>{header}</th>' for header in headers)}</tr>{rows}</table>"
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write("\n".join([",".join(headers)] + rows) if headers else rows)
 
     console.print(f"[blue]Results saved to {output_file} in {export_format.upper()} format[/blue]")
-
 def main():
     start_time = time.time()
 
@@ -312,9 +297,7 @@ def process_targets(urls, domains, wordlist, session, args, wildcard_content):
             mode = "url" if target in urls else "domain"
             task_id = tasks[target]
             handle_target(target, mode, progress, task_id, wordlist, session, args, wildcard_content)
-
-        for task_id in tasks.values():
-            progress.update(task_id, completed=len(wordlist))
+            progress.update(task_id, completed=len(wordlist))  # Combine progress update here
 
 if __name__ == "__main__":
     main()
